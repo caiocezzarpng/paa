@@ -170,8 +170,8 @@ O sistema respeita as seguintes restrições:
 - Cada aula já possui dia e horário pré-definidos no CSV
 
 ## Autores
-Alanis Oliveira Santos.
-Caio César Sousa Bandeira.
-Ricardo Alves da silva.
+- Alanis Oliveira Santos
+- Caio César Sousa Bandeira
+- Ricardo Alves da silva
 
 Sistema desenvolvido para a disciplina Projeto e Análise de Algoritmos (PAA) ministrada pelo Professor Caio César de Freitas Dantas
