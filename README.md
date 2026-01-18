@@ -169,6 +169,9 @@ O sistema respeita as seguintes restrições:
 - O número de alunos não pode exceder a capacidade da sala
 - Cada aula já possui dia e horário pré-definidos no CSV
 
-## Autor
+## Autores
+Alanis Oliveira Santos.
+Caio César Sousa Bandeira.
+Ricardo Alves da silva.
 
-Sistema desenvolvido para Projeto e Análise de Algoritmos (PAA)
+Sistema desenvolvido para a disciplina Projeto e Análise de Algoritmos (PAA) ministrada pelo Professor Caio César de Freitas Dantas
