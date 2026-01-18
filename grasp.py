@@ -180,10 +180,11 @@ def ver_disponibilidade(agenda):
 # Geração de PDF (Agenda/Calendário)
 # =========================
 
-def gerar_pdf_agenda(agenda, nome_arquivo=None):
+def gerar_pdf_agenda(agenda, nome_arquivo=None, aulas_nao_alocadas=None):
     """
     Gera um PDF com a agenda de horários no formato de calendário.
     Cada sala terá sua própria tabela com dias da semana nas colunas e horários nas linhas.
+    Se houver aulas não alocadas, inclui uma seção adicional listando-as.
     """
     if nome_arquivo is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -304,6 +305,79 @@ def gerar_pdf_agenda(agenda, nome_arquivo=None):
         elementos.append(tabela)
         elementos.append(Spacer(1, 1*cm))
     
+    # Seção de aulas não alocadas (se houver)
+    if aulas_nao_alocadas:
+        elementos.append(Spacer(1, 0.5*cm))
+        
+        # Estilo para título da seção de não alocadas
+        titulo_nao_alocadas_style = ParagraphStyle(
+            'TituloNaoAlocadas',
+            parent=styles['Heading2'],
+            fontSize=14,
+            alignment=0,
+            spaceAfter=10,
+            textColor=colors.HexColor('#C00000')
+        )
+        
+        titulo_nao_alocadas = Paragraph("⚠ Aulas Não Alocadas", titulo_nao_alocadas_style)
+        elementos.append(titulo_nao_alocadas)
+        
+        # Texto explicativo
+        texto_explicativo = Paragraph(
+            "As seguintes aulas não puderam ser alocadas devido a conflitos "
+            "de horário ou capacidade insuficiente dos laboratórios:",
+            styles['Normal']
+        )
+        elementos.append(texto_explicativo)
+        elementos.append(Spacer(1, 0.3*cm))
+        
+        # Cabeçalho da tabela de não alocadas
+        cabecalho_nao_alocadas = ["Disciplina", "Professor", "Dia", "Horário", "Alunos"]
+        dados_nao_alocadas = [cabecalho_nao_alocadas]
+        
+        for aula in aulas_nao_alocadas:
+            dia_nome = dias_semana[aula.dia] if aula.dia is not None else "N/A"
+            horario_nome = horarios_texto[aula.horario] if aula.horario is not None else "N/A"
+            linha = [
+                Paragraph(aula.disciplina[:40] + "..." if len(aula.disciplina) > 40 else aula.disciplina, celula_style),
+                aula.professor,
+                dia_nome[:3],
+                horario_nome,
+                str(aula.alunos)
+            ]
+            dados_nao_alocadas.append(linha)
+        
+        # Linha de total
+        dados_nao_alocadas.append([
+            Paragraph(f"<b>Total: {len(aulas_nao_alocadas)} aula(s) não alocada(s)</b>", celula_style),
+            "", "", "", ""
+        ])
+        
+        tabela_nao_alocadas = Table(
+            dados_nao_alocadas,
+            colWidths=[7*cm, 4*cm, 2.5*cm, 4*cm, 2*cm]
+        )
+        
+        estilo_nao_alocadas = TableStyle([
+            # Cabeçalho
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#C00000')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            # Bordas
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.gray),
+            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#C00000')),
+            # Última linha (total)
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#FFE0E0')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('SPAN', (0, -1), (-1, -1)),
+        ])
+        
+        tabela_nao_alocadas.setStyle(estilo_nao_alocadas)
+        elementos.append(tabela_nao_alocadas)
+    
     # Gerar PDF
     try:
         doc.build(elementos)
@@ -348,8 +422,10 @@ def construir_solucao_grasp(aulas):
       - gera todos os slots viáveis (respeitando restrições duras)
       - monta RCL com base em custo (sobra, prioridade de sala)
       - escolhe aleatório da RCL
+    Retorna: tupla (agenda, aulas_nao_alocadas)
     """
     agenda = criar_agenda_vazia()
+    aulas_nao_alocadas = []  # Lista para rastrear aulas não alocadas
 
     for aula in aulas:
         candidatos = []
@@ -364,7 +440,8 @@ def construir_solucao_grasp(aulas):
                 candidatos.append((custo, s_idx, dia, horario))
 
         if not candidatos:
-            # não conseguiu alocar essa aula (não conta como penalização, apenas fica fora)
+            # Não conseguiu alocar essa aula - adicionar à lista de não alocadas
+            aulas_nao_alocadas.append(aula)
             continue
 
         candidatos.sort(key=lambda x: x[0])
@@ -376,7 +453,7 @@ def construir_solucao_grasp(aulas):
         slot.ocupado = 1
         slot.aula = aula
 
-    return agenda
+    return agenda, aulas_nao_alocadas
 
 
 def clonar_agenda(agenda):
@@ -452,16 +529,18 @@ def buscar_melhora_local(agenda, max_tentativas=100):
 def grasp(aulas, iteracoes=20):
     melhor_global = None
     melhor_score_global = float("-inf")
+    melhor_aulas_nao_alocadas = []  # Rastrear aulas não alocadas da melhor solução
 
     for _ in range(iteracoes):
-        agenda_inicial = construir_solucao_grasp(aulas)
+        agenda_inicial, aulas_nao_alocadas = construir_solucao_grasp(aulas)
         agenda_refinada, score = buscar_melhora_local(agenda_inicial)
 
         if score > melhor_score_global:
             melhor_score_global = score
             melhor_global = agenda_refinada
+            melhor_aulas_nao_alocadas = aulas_nao_alocadas
 
-    return melhor_global, melhor_score_global
+    return melhor_global, melhor_score_global, melhor_aulas_nao_alocadas
 
 
 # =========================
@@ -643,14 +722,26 @@ def main():
                 print("\n⚠ Nenhuma aula encontrada no CSV. Verifique o arquivo.")
             else:
                 print(f"\nExecutando GRASP com {len(aulas)} aulas...")
-                melhor_agenda, score = grasp(aulas, iteracoes=30)
+                melhor_agenda, score, aulas_nao_alocadas = grasp(aulas, iteracoes=30)
                 ultima_agenda_grasp = melhor_agenda
+                
+                # Mostrar aviso de aulas não alocadas no console
+                if aulas_nao_alocadas:
+                    print(f"\n⚠ Atenção: {len(aulas_nao_alocadas)} aula(s) não puderam ser alocadas!")
+                    for aula in aulas_nao_alocadas:
+                        dia_nome = dias_semana[aula.dia] if aula.dia is not None else "N/A"
+                        horario_nome = horarios_texto[aula.horario] if aula.horario is not None else "N/A"
+                        print(f"   - {aula.disciplina} ({aula.professor}) - {dia_nome}, {horario_nome}")
+                
                 print(f"\nScore da melhor agenda (GRASP): {score}")
                 mostrar_agenda(melhor_agenda)
                 
-                # Gera PDF automaticamente
-                print("\nGerando PDF da agenda GRASP...")
-                gerar_pdf_agenda(melhor_agenda, "agenda_grasp.pdf")
+                # Gera PDF automaticamente (incluindo aulas não alocadas)
+                # Nome do PDF baseado no nome do arquivo CSV de entrada
+                nome_base = os.path.splitext(os.path.basename(nome_arquivo))[0]
+                nome_pdf = f"{nome_base}_grasp.pdf"
+                print(f"\nGerando PDF da agenda GRASP: {nome_pdf}...")
+                gerar_pdf_agenda(melhor_agenda, nome_pdf, aulas_nao_alocadas)
         elif opcao == '5':
             print("\nGerando PDF da agenda manual...")
             gerar_pdf_agenda(agenda_manual, "agenda_manual.pdf")

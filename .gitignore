@@ -1,1 +1,5 @@
-/agenda_grasp.pdf
+# Arquivos PDF gerados
+*.pdf
+
+# Arquivo de especificação de ajustes
+ESPECIFICACAO_AJUSTES.md
